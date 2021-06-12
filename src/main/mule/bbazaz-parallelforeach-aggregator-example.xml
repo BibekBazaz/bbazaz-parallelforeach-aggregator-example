@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule
+	xmlns:aggregators="http://www.mulesoft.org/schema/mule/aggregators"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/aggregators http://www.mulesoft.org/schema/mule/aggregators/current/mule-aggregators.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="09deba41-d1cc-41cb-9fcc-d787e427e5f9" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<file:config name="File_Config" doc:name="File Config" doc:id="9e78d02a-5bc3-4d0a-8b80-12ed09f9788d" >
+		<file:connection workingDir="${app.home}" />
+	</file:config>
+	<flow name="bbazaz-parallelforeach-aggregator-exampleFlow" doc:id="0f29dec0-1fc7-4acf-90bb-81e705ed5ffd" >
+		<http:listener doc:name="Listener" doc:id="15291531-a2cb-44fb-b389-274eb41313a0" config-ref="HTTP_Listener_config" path="/start"/>
+		<logger level="INFO" doc:name="Log Request Processing" doc:id="28dbdbb1-39c0-4059-987e-8386482f1ba8" message='#["Processing began at : " ++ now()]'/>
+		<set-variable value="#[now()]" doc:name="startTime" doc:id="f311bf03-e252-425e-adfe-9b32f978c425" variableName="startTime"/>
+		<file:read doc:name="Read" doc:id="0acc8e74-c02c-4e15-87a4-21408006fe28" config-ref="File_Config" path="sampleData/data.csv" outputMimeType='application/csv; escape="\"\\\""; header=true' outputEncoding="UTF-8"/><logger level="INFO" doc:name="Log Size of records" doc:id="d33907ab-59b9-45c4-b4c8-22cf030bce97" message='#["Total records : " ++ sizeOf(payload)]'/>
+		<parallel-foreach collection="#[payload]"  maxConcurrency="10" doc:name="For Each acting as Parallel for each" doc:id="9db09ee3-3752-4ab7-babc-562335926205" >
+			<aggregators:size-based-aggregator doc:name="Size based aggregator" doc:id="c7f9bc70-139d-42ba-802c-611094797e3a" name="Collect_Customer_Records" maxSize="1000">
+				<aggregators:aggregation-complete >
+					<flow-ref doc:name="Call action flows" doc:id="3c538994-afee-442d-8164-217580d2af72" name="bbazaz-parallelforeach-aggregator-exampleSub_Flow"/>
+				</aggregators:aggregation-complete>
+			</aggregators:size-based-aggregator>
+		</parallel-foreach>
+		<set-variable value="#[now() - vars.startTime]" doc:name="Set Variable" doc:id="a1e8ad20-7640-4a50-acff-8a123ecbc11e" variableName="totalTime"/>
+		<logger level="INFO" doc:name="Log Process Completion " doc:id="09e8c1eb-d08c-4b69-835f-cb47fa1cbc16" message='#["Process completed at : " ++ now()]'/>
+		<set-payload value='#["Time taken : " ++ vars.totalTime]' doc:name="Set Payload" doc:id="cb9cc775-f04c-4724-8f75-0f3ac08e2616" />
+	</flow>
+	<sub-flow name="bbazaz-parallelforeach-aggregator-exampleSub_Flow" doc:id="13ffdea3-9333-45f4-8cde-af7e202ffd10" >
+		<logger level="INFO" doc:name="Log process" doc:id="93181a0a-7dae-4676-97ef-060b63e09d5f" message="#[&quot;Received action request, writing the payload to location : &quot; ++ p('app.home')]"/>
+		<ee:transform doc:name="Convert to json" doc:id="81e6d27f-be1b-492c-bcf0-602ad434d96f" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<file:write doc:name="Write Files " doc:id="c89ce542-77fa-4266-8775-8b1acf92295e" config-ref="File_Config" path='#[uuid() ++ ".json"]'/>
+	</sub-flow>
+</mule>
